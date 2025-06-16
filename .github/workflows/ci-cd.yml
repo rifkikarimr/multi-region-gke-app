@@ -1,0 +1,48 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up GCP credentials
+      uses: google-github-actions/auth@v0
+      with:
+        credentials_json: ${{ secrets.GOOGLE_CREDENTIALS }}
+
+    - name: Set up GKE credentials
+      uses: google-github-actions/get-gke-credentials@v0
+      with:
+        cluster_name: gke-cluster-us
+        location: us-central1
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Build and push Docker image
+      run: |
+        docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/multi-region-gke-app:${{ github.sha }} ./webapp
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/multi-region-gke-app:${{ github.sha }}
+
+    - name: Deploy to GKE US cluster
+      run: |
+        kubectl set image deployment/multi-region-gke-app multi-region-gke-app=gcr.io/${{ secrets.GCP_PROJECT_ID }}/multi-region-gke-app:${{ github.sha }}
+        kubectl rollout status deployment/multi-region-gke-app
+
+    - name: Set up GKE credentials for EU cluster
+      uses: google-github-actions/get-gke-credentials@v0
+      with:
+        cluster_name: gke-cluster-eu
+        location: europe-west1
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Deploy to GKE EU cluster
+      run: |
+        kubectl set image deployment/multi-region-gke-app multi-region-gke-app=gcr.io/${{ secrets.GCP_PROJECT_ID }}/multi-region-gke-app:${{ github.sha }}
+        kubectl rollout status deployment/multi-region-gke-app

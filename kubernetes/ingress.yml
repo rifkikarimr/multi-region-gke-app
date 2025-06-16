@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: multi-region-gke-ingress
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "multi-region-gke-static-ip"
+spec:
+  defaultBackend:
+    service:
+      name: multi-region-gke-app-service
+      port:
+        number: 80

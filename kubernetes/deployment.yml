@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-region-gke-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: multi-region-gke-app
+  template:
+    metadata:
+      labels:
+        app: multi-region-gke-app
+    spec:
+      containers:
+      - name: multi-region-gke-app
+        image: us-central1.pkg.dev/karim-dev404/gke-tf-project/multi-region-gke-app:latest
+        ports:
+        - containerPort: 8080
