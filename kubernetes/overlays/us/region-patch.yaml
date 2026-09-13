@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-region-gke-app
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          env:
+            - name: DEPLOYMENT_REGION
+              value: us

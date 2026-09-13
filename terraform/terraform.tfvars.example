@@ -1,0 +1,27 @@
+project_id = "your-gcp-project-id"
+
+# This repository is the only GitHub identity trusted by the OIDC provider.
+github_repository = "your-github-owner/multi-region-gke-app"
+
+github_deployer_service_account_id = "github-gke-deployer"
+gke_node_service_account_id         = "gke-node-runtime"
+github_workload_identity_pool_id    = "github-actions"
+
+regions = {
+  us = "us-central1"
+  eu = "europe-west1"
+}
+
+node_zones = {
+  us = "us-central1-a"
+  eu = "europe-west1-b"
+}
+
+artifact_registry_location   = "us-central1"
+artifact_registry_repository = "gke-apps"
+machine_type                 = "e2-standard-2"
+node_min_count               = 1
+node_max_count               = 3
+
+# Enable only when the longer-lived environment should resist accidental destroy.
+deletion_protection = false

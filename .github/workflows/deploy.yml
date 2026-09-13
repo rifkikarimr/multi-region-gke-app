@@ -1,0 +1,90 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - app/**
+      - kubernetes/**
+      - .github/workflows/deploy.yml
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GAR_LOCATION: ${{ vars.GAR_LOCATION }}
+      GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+      IMAGE_NAME: multi-region-gke-app
+      US_CLUSTER: ${{ vars.GKE_US_CLUSTER }}
+      US_LOCATION: ${{ vars.GKE_US_LOCATION }}
+      EU_CLUSTER: ${{ vars.GKE_EU_CLUSTER }}
+      EU_LOCATION: ${{ vars.GKE_EU_LOCATION }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud with GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Artifact Registry authentication
+        run: gcloud auth configure-docker "${GAR_LOCATION}-docker.pkg.dev" --quiet
+
+      - name: Build and push immutable image
+        env:
+          IMAGE_URI: ${{ vars.GAR_LOCATION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/multi-region-gke-app:${{ github.sha }}
+        run: |
+          docker build --tag "${IMAGE_URI}" app
+          docker push "${IMAGE_URI}"
+
+      - name: Get US cluster credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_US_CLUSTER }}
+          location: ${{ vars.GKE_US_LOCATION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy and verify US cluster
+        env:
+          IMAGE_URI: ${{ vars.GAR_LOCATION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/multi-region-gke-app:${{ github.sha }}
+        run: |
+          kubectl kustomize kubernetes/overlays/us \
+            | sed "s|APP_IMAGE|${IMAGE_URI}|g" \
+            | kubectl apply -f -
+          kubectl --namespace multi-region-gke-app rollout status deployment/multi-region-gke-app --timeout=5m
+          kubectl --namespace multi-region-gke-app get deployment,pods,service
+
+      - name: Get EU cluster credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_EU_CLUSTER }}
+          location: ${{ vars.GKE_EU_LOCATION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy and verify EU cluster
+        env:
+          IMAGE_URI: ${{ vars.GAR_LOCATION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/multi-region-gke-app:${{ github.sha }}
+        run: |
+          kubectl kustomize kubernetes/overlays/eu \
+            | sed "s|APP_IMAGE|${IMAGE_URI}|g" \
+            | kubectl apply -f -
+          kubectl --namespace multi-region-gke-app rollout status deployment/multi-region-gke-app --timeout=5m
+          kubectl --namespace multi-region-gke-app get deployment,pods,service
